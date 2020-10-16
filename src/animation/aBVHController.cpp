@@ -57,22 +57,20 @@ void BVHController::update(double time, bool updateRootXZTranslation)
 	// 2. update the joint transforms of the full skeleton in order to compute the global transforms at each joint
 	// Hint: the root can both rotate and translate (i.e. has 6 DOFs) while all the other joints just rotate 
     vec3 rootMotion = mRootMotion.getValue(time);
-    bool isRoot = true;
     for (auto const& motion : mMotion)
     {
         AJoint *joint = mSkeleton->getJointByID(motion.first);
         quat qMotion = motion.second.getCachedValue(time);
-        joint->setLocalRotation(qMotion.ToRotation());
 
-        if (isRoot)
+        if (motion.first == 0)
         {
             if (!updateRootXZTranslation)
                 rootMotion[0] = rootMotion[2] = 0;
             joint->setLocalTranslation(rootMotion);
-            isRoot = false;
         }
-        //joint->updateTransform();
+        joint->setLocalRotation(qMotion.ToRotation());
     }
+    mSkeleton->update();
 }
 
 bool BVHController::load(const std::string& filename)

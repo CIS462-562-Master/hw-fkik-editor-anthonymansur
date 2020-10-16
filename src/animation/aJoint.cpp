@@ -218,7 +218,8 @@ void AJoint::updateTransform()
 	} 
 	else
 	{
-		mLocal2Global = mLocal2Parent * mParent->mLocal2Global;
+		mLocal2Global =  mParent->mLocal2Global * mLocal2Parent;
+		//mLocal2Global = mParent->mLocal2Global; // May be this...
 	}
 }
 

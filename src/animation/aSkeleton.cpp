@@ -134,12 +134,12 @@ void ASkeleton::update()
 
 void updateJoint(AJoint *joint)
 {
+	joint->updateTransform();
+
 	for (int i = 0; i < joint->getNumChildren(); i++)
 	{
 		updateJoint(joint->getChildAt(i));
 	}
-
-	joint->updateTransform();
 }
 
 AJoint* ASkeleton::getJointByName(const std::string& name) const

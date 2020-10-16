@@ -59,7 +59,7 @@ vec3 ATransform::Translate(const vec3& vecToTransform) const
 
 ATransform operator * (const ATransform& H1, const ATransform& H2)
 {
-	// TODO: implement the equivalent of multiplying  H1 and H2 transformation matrices and return the result
+	// TODO: implement the equivalent of multiplying H1 and H2 transformation matrices and return the result
 	mat3 n_rotation = H1.m_rotation * H2.m_rotation;
 	vec3 n_translation = H1.m_rotation * H2.m_translation + H1.m_translation;
 
