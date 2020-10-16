@@ -12,33 +12,33 @@ ASplineQuat::~ASplineQuat()
 
 void ASplineQuat::setInterpolationType(ASplineQuat::InterpolationType type)
 {
-    mType = type;
-    cacheCurve();
+	mType = type;
+	cacheCurve();
 }
 
 ASplineQuat::InterpolationType ASplineQuat::getInterpolationType() const
 {
-    return mType;
+	return mType;
 }
 
 void ASplineQuat::setLooping(bool loop)
 {
-    mLooping = loop;
+	mLooping = loop;
 }
 
 bool ASplineQuat::getLooping() const
 {
-    return mLooping;
+	return mLooping;
 }
 
 void ASplineQuat::setFramerate(double fps)
 {
-    mDt = 1.0 / fps;
+	mDt = 1.0 / fps;
 }
 
 double ASplineQuat::getFramerate() const
 {
-    return 1.0 / mDt;
+	return 1.0 / mDt;
 }
 
 int ASplineQuat::getCurveSegment(double time)
@@ -60,7 +60,7 @@ int ASplineQuat::getCurveSegment(double time)
 			double keyTime0 = mKeys[segment].first;
 			double keyTime1 = mKeys[segment + 1].first;
 			if ((t >= keyTime0) && (t < keyTime1))
-				 foundSegment = true;
+				foundSegment = true;
 			else segment++;
 		}
 	}
@@ -105,7 +105,7 @@ void ASplineQuat::cacheCurve()
 	if (mType == CUBIC && numKeys >= 2)
 	{
 		quat startQuat = mKeys[0].second;
-		quat endQuat = mKeys[numKeys-1].second;
+		quat endQuat = mKeys[numKeys - 1].second;
 
 		computeControlPoints(startQuat, endQuat);
 		createSplineCurveCubic();
@@ -121,7 +121,6 @@ void ASplineQuat::computeControlPoints(quat& startQuat, quat& endQuat)
 	if (numKeys <= 1) return;
 
 	quat b0, b1, b2, b3;
-	quat q_1, q0, q1, q2;
 
 	for (int segment = 0; segment < numKeys - 1; segment++)
 	{
@@ -131,6 +130,27 @@ void ASplineQuat::computeControlPoints(quat& startQuat, quat& endQuat)
 		//  as was used with the SplineVec implementation
 		//  Hint: use the SDouble, SBisect and Slerp to compute b1 and b2
 
+		quat qiminus1;
+		quat qiplus2;
+		if (segment == 0) {
+			qiminus1 = startQuat;
+		}
+		else {
+			qiminus1 = ASplineQuat::getKey(segment - 1);
+		}
+
+		if (segment == numKeys - 2) {
+			qiplus2 = endQuat;
+		}
+		else {
+			qiplus2 = ASplineQuat::getKey(segment + 2);
+		}
+		quat qi = ASplineQuat::getKey(segment);
+		quat qiplus1 = ASplineQuat::getKey(segment + 1);
+		b0 = qi;
+		b1 = quat::Slerp(qi, quat::SBisect(quat::SDouble(qiminus1, qi), qiplus1), 1 / 3.0);
+		b2 = quat::Slerp(qiplus1, quat::SBisect(qi, quat::SDouble(qiplus2, qiplus1)), 1 / 3.0);
+		b3 = qiplus1;
 
 		mCtrlPoints.push_back(b0);
 		mCtrlPoints.push_back(b1);
@@ -142,13 +162,13 @@ void ASplineQuat::computeControlPoints(quat& startQuat, quat& endQuat)
 quat ASplineQuat::getLinearValue(double t)
 {
 
-	quat q;
 	int segment = getCurveSegment(t);
 
 	// TODO: student implementation goes here
 	// compute the value of a linear quaternion spline at the value of t using slerp
-
-	return q;	
+	quat q1 = ASplineQuat::getKey(segment);
+	quat q2 = ASplineQuat::getKey(segment + 1);
+	return quat::Slerp(q1, q2, ASplineQuat::getNormalizedTime(t));
 }
 
 void ASplineQuat::createSplineCurveLinear()
@@ -156,9 +176,9 @@ void ASplineQuat::createSplineCurveLinear()
 
 	quat q;
 	mCachedCurve.clear();
-	int numKeys = mKeys.size(); 
+	int numKeys = mKeys.size();
 	double startTime = mKeys[0].first;
-	double endTime = mKeys[numKeys-1].first;
+	double endTime = mKeys[numKeys - 1].first;
 
 	for (double t = startTime; t <= endTime; t += mDt)
 	{
@@ -170,13 +190,16 @@ void ASplineQuat::createSplineCurveLinear()
 
 quat ASplineQuat::getCubicValue(double t)
 {
-	quat q, b0, b1, b2, b3;
+	quat b0, b1, b2, b3;
 	int segment = getCurveSegment(t);
 
 	// TODO: student implementation goes here
 	// compute the value of a cubic quaternion spline at the value of t using Scubic
-
-	return q;
+	b0 = mCtrlPoints.at(4 * segment + 0);
+	b1 = mCtrlPoints.at(4 * segment + 1);
+	b2 = mCtrlPoints.at(4 * segment + 2);
+	b3 = mCtrlPoints.at(4 * segment + 3);
+	return quat::Scubic(b0, b1, b2, b3, ASplineQuat::getNormalizedTime(t));
 }
 
 void ASplineQuat::createSplineCurveCubic()
@@ -197,22 +220,22 @@ void ASplineQuat::createSplineCurveCubic()
 
 void ASplineQuat::editKey(int keyID, const quat& value)
 {
-    assert(keyID >= 0 && keyID < mKeys.size());
-    mKeys[keyID].second = value;
+	assert(keyID >= 0 && keyID < mKeys.size());
+	mKeys[keyID].second = value;
 	cacheCurve();
 }
 
 void ASplineQuat::appendKey(const quat& value, bool updateCurve)
 {
-    if (mKeys.size() == 0)
-    {
-        appendKey(0, value, updateCurve);
-    }
-    else
-    {
-        double lastT = mKeys[mKeys.size() - 1].first;
-        appendKey(lastT + 1, value, updateCurve);
-    }
+	if (mKeys.size() == 0)
+	{
+		appendKey(0, value, updateCurve);
+	}
+	else
+	{
+		double lastT = mKeys[mKeys.size() - 1].first;
+		appendKey(lastT + 1, value, updateCurve);
+	}
 }
 
 int ASplineQuat::insertKey(double time, const quat& value, bool updateCurve)
@@ -240,41 +263,41 @@ int ASplineQuat::insertKey(double time, const quat& value, bool updateCurve)
 
 void ASplineQuat::appendKey(double t, const quat& value, bool updateCurve)
 {
-    mKeys.push_back(Key(t, value));
-    if (updateCurve) cacheCurve();
+	mKeys.push_back(Key(t, value));
+	if (updateCurve) cacheCurve();
 }
 
 void ASplineQuat::deleteKey(int keyID)
 {
-    assert(keyID >= 0 && keyID < mKeys.size());
-    mKeys.erase(mKeys.begin() + keyID);
+	assert(keyID >= 0 && keyID < mKeys.size());
+	mKeys.erase(mKeys.begin() + keyID);
 	cacheCurve();
 }
 
 quat ASplineQuat::getKey(int keyID)
 {
-    assert(keyID >= 0 && keyID < mKeys.size());
-    return mKeys[keyID].second;
+	assert(keyID >= 0 && keyID < mKeys.size());
+	return mKeys[keyID].second;
 }
 
 int ASplineQuat::getNumKeys() const
 {
-    return mKeys.size();
+	return mKeys.size();
 }
 
 void ASplineQuat::clear()
 {
-    mKeys.clear();
+	mKeys.clear();
 }
 
 double ASplineQuat::getDuration() const
 {
-    return mCachedCurve.size() * mDt;
+	return mCachedCurve.size() * mDt;
 }
 
 double ASplineQuat::getNormalizedTime(double t) const
 {
-    double duration = getDuration();
-    int rawi = (int)(t / duration);
-    return t - rawi*duration;
+	double duration = getDuration();
+	int rawi = (int)(t / duration);
+	return t - rawi * duration;
 }

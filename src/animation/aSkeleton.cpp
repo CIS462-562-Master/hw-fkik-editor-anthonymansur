@@ -2,6 +2,7 @@
 
 #pragma warning(disable : 4018)
 
+void updateJoint(AJoint*);
 
 /****************************************************************
 *
@@ -127,7 +128,18 @@ void ASkeleton::update()
 	if (!mRoot) return; // Nothing loaded
 
 	// TODO: Update Joint Transforms recursively, starting at the root
+	updateJoint(mRoot);
 
+}
+
+void updateJoint(AJoint *joint)
+{
+	for (int i = 0; i < joint->getNumChildren(); i++)
+	{
+		updateJoint(joint->getChildAt(i));
+	}
+
+	joint->updateTransform();
 }
 
 AJoint* ASkeleton::getJointByName(const std::string& name) const
