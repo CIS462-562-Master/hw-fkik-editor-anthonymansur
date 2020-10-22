@@ -70,7 +70,7 @@ IKController::IKController()
 {
 	m_pActor = NULL;
 	m_pSkeleton = NULL;
-	mvalidLimbIKchains = false;
+	mvalidLimbIKchains = true;
 	mvalidCCDIKchains = false;
 
 	// Limb IK
@@ -133,7 +133,29 @@ AIKchain IKController::createIKchain(int endJointID, int desiredChainSize, ASkel
 	// add the corresponding skeleton joint pointers to the AIKChain "chain" data member starting with the end joint
 	// desiredChainSize = -1 should create an IK chain of maximum length (where the last chain joint is the joint before the root joint)
 	// also add weight values to the associated AIKChain "weights" data member which can be used in a CCD IK implemention
-	return AIKchain();
+	AJoint *currJoint = pSkeleton->getJointByID(endJointID);
+	std::vector<AJoint*> joints;
+	bool stopIter = desiredChainSize == 0 ? true : false;
+	int i = 0;
+	while (!stopIter)
+	{
+		if (currJoint == nullptr)
+		{
+			break;
+		}
+		// insert join to chain
+		joints.push_back(currJoint);
+		i++;
+
+		currJoint = currJoint->getParent();
+		if (desiredChainSize == i || currJoint == nullptr)
+		{
+			stopIter == true;
+		} 
+	}
+	AIKchain chain = AIKchain();
+	chain.setChain(joints);
+	return chain;
 }
 
 
@@ -234,7 +256,55 @@ int IKController::computeLimbIK(ATarget target, AIKchain& IKchain, const vec3 mi
 	// TODO: Implement the analytic/geometric IK method assuming a three joint limb  
 	// The actual position of the end joint should match the target position within some episilon error 
 	// the variable "midJointAxis" contains the rotation axis for the middle joint
-	return true;
+
+	double EPSILON = 1E-5;
+
+	// get joints
+	AJoint* j1 = IKchain.getJoint(2);
+	AJoint* j2 = IKchain.getJoint(1);
+	AJoint* j3 = IKchain.getJoint(0);
+
+	// get bone lengths
+	double l1 = vec3(j2->getGlobalTranslation() - j1->getGlobalTranslation()).Length();
+	double l2 = vec3(j3->getGlobalTranslation() - j2->getGlobalTranslation()).Length();
+
+	vec3 localTarget = target.getGlobalTranslation() - j1->getGlobalTranslation();
+	bool lockJoint = false;
+	// normalize target if creater than limb size
+	if (localTarget.Length() > (l1 + l2))
+	{
+		localTarget = (localTarget.Normalize() * (l1 + l2)) - EPSILON;
+		lockJoint = true;
+	}
+
+	// set angle of elbow/knee
+	if (!lockJoint)
+	{
+		double radius = localTarget.Length();
+		double angle = acos((pow(l1, 2.0) + pow(l2, 2.0) - pow(radius, 2.0)) / (2 * l1 * l2));
+		mat3 j2LocalRotation = mat3();
+		j2LocalRotation.FromAxisAngle(midJointAxis, M_PI - angle);
+		j2->setLocalRotation(j2LocalRotation);
+	}
+
+	// set angle of shoulder using second approach
+	vec3 t = localTarget;
+	vec3 rd = j3->getGlobalTranslation() - j1->getGlobalTranslation();
+
+	double alpha = acos((t * rd) / (t.Length() * rd.Length()));
+	vec3 axis = rd.Cross(t).Normalize();
+	
+	axis *= sin(alpha / 2);
+	quat q = quat(cos(alpha / 2), axis[0], axis[1], axis[2]);
+	mat3 rot = q.ToRotation();
+
+	j1->setLocalRotation(rot);
+
+	// update skeleton
+	pIKSkeleton->update();
+
+	vec3 localVec = j3->getGlobalTranslation() - j1->getGlobalTranslation();
+	return (localVec - localTarget).Length() < EPSILON;
 }
 
 bool IKController::IKSolver_CCD(int endJointID, const ATarget& target)
