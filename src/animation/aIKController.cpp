@@ -70,7 +70,7 @@ IKController::IKController()
 {
 	m_pActor = NULL;
 	m_pSkeleton = NULL;
-	mvalidLimbIKchains = true;
+	mvalidLimbIKchains = false;
 	mvalidCCDIKchains = false;
 
 	// Limb IK
@@ -150,11 +150,13 @@ AIKchain IKController::createIKchain(int endJointID, int desiredChainSize, ASkel
 		currJoint = currJoint->getParent();
 		if (desiredChainSize == i || currJoint == nullptr)
 		{
-			stopIter == true;
+			stopIter = true;
 		} 
 	}
 	AIKchain chain = AIKchain();
 	chain.setChain(joints);
+	std::cout << chain.getSize() << ", " << desiredChainSize << std::endl;
+	chain.getSize();
 	return chain;
 }
 
@@ -167,9 +169,12 @@ bool IKController::IKSolver_Limb(int endJointID, const ATarget& target)
 	// copy transforms from base skeleton
 	mIKSkeleton.copyTransforms(m_pSkeleton);
 
-	if (!mvalidLimbIKchains || createLimbIKchains())
+	if (!mvalidLimbIKchains)
 	{
-		return false;
+		mvalidLimbIKchains = createLimbIKchains();
+		if (!mvalidLimbIKchains) { 
+			return false; 
+		}
 	}
 
 	vec3 desiredRootPosition;
@@ -248,8 +253,10 @@ int IKController::createLimbIKchains()
 	return validChains;
 }
 
-
-
+double clamp(double d, double l, double r)
+{
+	return d < l ? l : d > r ? r : d;
+}
 
 int IKController::computeLimbIK(ATarget target, AIKchain& IKchain, const vec3 midJointAxis, ASkeleton* pIKSkeleton)
 {
@@ -268,43 +275,33 @@ int IKController::computeLimbIK(ATarget target, AIKchain& IKchain, const vec3 mi
 	double l1 = vec3(j2->getGlobalTranslation() - j1->getGlobalTranslation()).Length();
 	double l2 = vec3(j3->getGlobalTranslation() - j2->getGlobalTranslation()).Length();
 
-	vec3 localTarget = target.getGlobalTranslation() - j1->getGlobalTranslation();
-	bool lockJoint = false;
-	// normalize target if creater than limb size
-	if (localTarget.Length() > (l1 + l2))
-	{
-		localTarget = (localTarget.Normalize() * (l1 + l2)) - EPSILON;
-		lockJoint = true;
-	}
-
 	// set angle of elbow/knee
-	if (!lockJoint)
-	{
-		double radius = localTarget.Length();
-		double angle = acos((pow(l1, 2.0) + pow(l2, 2.0) - pow(radius, 2.0)) / (2 * l1 * l2));
-		mat3 j2LocalRotation = mat3();
-		j2LocalRotation.FromAxisAngle(midJointAxis, M_PI - angle);
-		j2->setLocalRotation(j2LocalRotation);
-	}
+	double radius = (target.getGlobalTranslation() - j1->getGlobalTranslation()).Length();
+	double angle = acos(clamp((pow(l1, 2.0) + pow(l2, 2.0) - pow(radius, 2.0)) / (2 * l1 * l2), -1, 1));
+	mat3 j2LocalRotation = mat3();
+	j2LocalRotation.FromAxisAngle(midJointAxis, M_PI - angle);
+	j2->setLocalRotation(j2LocalRotation);
 
-	// set angle of shoulder using second approach
-	vec3 t = localTarget;
+	// Get the angle and axis of rotation
+	vec3 t = target.getGlobalTranslation() - j1->getGlobalTranslation();
 	vec3 rd = j3->getGlobalTranslation() - j1->getGlobalTranslation();
-
-	double alpha = acos((t * rd) / (t.Length() * rd.Length()));
+	double alpha = acos(t.Normalize() * rd.Normalize());
 	vec3 axis = rd.Cross(t).Normalize();
 	
-	axis *= sin(alpha / 2);
-	quat q = quat(cos(alpha / 2), axis[0], axis[1], axis[2]);
-	mat3 rot = q.ToRotation();
+	// get the quaternion with respect to shoulder/hip
+	alpha /= 2.0;
+	axis = j1->getGlobalRotation().Inverse() * axis * sin(alpha); // world to local joint orientation
+	quat q = quat(cos(alpha), axis[0], axis[1], axis[2]);
 
-	j1->setLocalRotation(rot);
+	// set the angle of shoulder/hip and wrist/ankle
+	mat3 rot = q.ToRotation();
+	j1->setLocalRotation(j1->getLocalRotation() * rot);
+	j3->setLocalRotation((j1->getGlobalRotation() * j2->getLocalRotation()).Inverse() * target.getGlobalRotation());
 
 	// update skeleton
 	pIKSkeleton->update();
 
-	vec3 localVec = j3->getGlobalTranslation() - j1->getGlobalTranslation();
-	return (localVec - localTarget).Length() < EPSILON;
+	return (rd - t).Length() < EPSILON;
 }
 
 bool IKController::IKSolver_CCD(int endJointID, const ATarget& target)
