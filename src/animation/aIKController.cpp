@@ -264,8 +264,6 @@ int IKController::computeLimbIK(ATarget target, AIKchain& IKchain, const vec3 mi
 	// The actual position of the end joint should match the target position within some episilon error 
 	// the variable "midJointAxis" contains the rotation axis for the middle joint
 
-	double EPSILON = 1E-5;
-
 	// get joints
 	AJoint* j1 = IKchain.getJoint(2);
 	AJoint* j2 = IKchain.getJoint(1);
@@ -296,12 +294,11 @@ int IKController::computeLimbIK(ATarget target, AIKchain& IKchain, const vec3 mi
 	// set the angle of shoulder/hip and wrist/ankle
 	mat3 rot = q.ToRotation();
 	j1->setLocalRotation(j1->getLocalRotation() * rot);
-	j3->setLocalRotation((j1->getGlobalRotation() * j2->getLocalRotation()).Inverse() * target.getGlobalRotation());
 
 	// update skeleton
 	pIKSkeleton->update();
 
-	return (rd - t).Length() < EPSILON;
+	return (rd - t).Length() < gIKEpsilon;
 }
 
 bool IKController::IKSolver_CCD(int endJointID, const ATarget& target)
@@ -401,15 +398,46 @@ int IKController::computeCCDIK(ATarget target, AIKchain& IKchain, ASkeleton* pIK
 
 	// TODO: Implement CCD IK  
 	// The actual position of the end joint should match the desiredEndPos within some episilon error 
-
-
 	//Hint:
 	// 1. compute axis and angle for a joint in the IK chain (distal to proximal) in global coordinates
 	// 2. once you have the desired axis and angle, convert axis to local joint coords 
 	// 3. compute desired change to local rotation matrix
 	// 4. set local rotation matrix to new value
 	// 5. update transforms for joint and all children
-	return true;
+
+	// initialize global variables
+	AJoint* endJoint = IKchain.getJoint(0);
+	double error = DBL_MAX;
+	int count = 0;
+	while (error > gIKEpsilon && count < 10)
+	{
+		for (int i = 1; i < IKchain.getSize(); i++)
+		{
+			// initialize variables
+			AJoint* joint = IKchain.getJoint(i);
+			vec3 radius = target.getGlobalTranslation() - IKchain.getJoint(i)->getGlobalTranslation();
+			vec3 error = target.getGlobalTranslation() - endJoint->getGlobalTranslation();
+
+			// compute axis and angle in global coordinates
+			double angle = mWeight0 * (radius.Cross(error).Length() / ((radius * radius) + (radius * error)));
+			vec3 axis = radius.Cross(error).Normalize();
+
+			// get the quaternion with respect to joint
+			angle /= 2.0;
+			axis = joint->getGlobalRotation().Inverse() * axis * sin(angle); // world to local joint orientation
+			quat q = quat(cos(angle), axis[0], axis[1], axis[2]);
+
+			// set the angle of joint
+			mat3 rot = q.ToRotation();
+			joint->setLocalRotation(joint->getLocalRotation() * rot);
+
+		}
+		error = (target.getGlobalTranslation() - endJoint->getGlobalTranslation()).Length();
+		count++;
+		pIKSkeleton->update();
+	}
+	
+	return error > gIKEpsilon;
 }
 
 
