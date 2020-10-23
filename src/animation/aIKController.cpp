@@ -155,7 +155,6 @@ AIKchain IKController::createIKchain(int endJointID, int desiredChainSize, ASkel
 	}
 	AIKchain chain = AIKchain();
 	chain.setChain(joints);
-	std::cout << chain.getSize() << ", " << desiredChainSize << std::endl;
 	chain.getSize();
 	return chain;
 }
