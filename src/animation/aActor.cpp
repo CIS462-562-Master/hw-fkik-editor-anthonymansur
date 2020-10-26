@@ -160,15 +160,15 @@ void AActor::solveFootIK(float leftHeight, float rightHeight, bool rotateLeft, b
 	{
 		// Update the local orientation of the left foot based on the left normal
 		vec3 right = m_Guide.getGlobalRotation().GetCol(0);
-		leftNormal[0] = 0;
-		leftFoot->setLocalRotation(mat3(right, leftNormal, leftNormal.Cross(right)));
+		vec3 up = leftFoot->getParent()->getGlobalRotation().Inverse() * leftNormal;
+		leftFoot->setLocalRotation(mat3(right, up, up.Cross(right)).Transpose());
 	}
 	if (rotateRight)
 	{
 		// Update the local orientation of the right foot based on the right normal
 		vec3 right = m_Guide.getGlobalRotation().GetCol(0);
-		rightNormal[0] = 0;
-		rightFoot->setLocalRotation(mat3(right, rightNormal, rightNormal.Cross(right)));
+		vec3 up = rightFoot->getParent()->getGlobalRotation().Inverse() * rightNormal;
+		rightFoot->setLocalRotation(mat3(right, up, up.Cross(right)).Transpose());
 	}
 	m_pSkeleton->update();
 }
